@@ -98,15 +98,12 @@ async def management_task():
 async def on_ready():
     print(f'{bot.user}가 가동되었습니다!')
 
-    # 1. 상태 설정 (활동 + 말풍선 합치기)
-    # CustomActivity에서 emoji 인자가 가끔 에러를 내니, 안전하게 name에 합쳤습니다.
-    activity_list = [
-        discord.Activity(type=discord.ActivityType.watching, name="서버 인원 전수 조사"),
-        discord.CustomActivity(name="연님을 위해서 24시간 일하는 중 🥵")
-    ]
-    
+    # 라이브러리 버전에 맞춰 단수형 'activity'로 수정합니다.
+    # 두 개를 동시에 띄우는 게 안 되는 버전이므로, 연우님이 가장 원하셨던 '말풍선'을 우선으로 설정할게요!
     try:
-        await bot.change_presence(status=discord.Status.online, activities=activity_list)
+        # 말풍선(CustomActivity) 설정
+        status_msg = discord.CustomActivity(name="연님을 위해서 24시간 일하는 중 🥵")
+        await bot.change_presence(status=discord.Status.online, activity=status_msg)
         print("상태 메시지 설정 완료!")
     except Exception as e:
         print(f"상태 설정 중 오류 발생: {e}")
