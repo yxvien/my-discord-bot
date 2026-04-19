@@ -98,14 +98,18 @@ async def management_task():
 async def on_ready():
     print(f'{bot.user}가 가동되었습니다!')
 
-    # 1. 두 가지 상태를 리스트로 묶기
+    # 1. 상태 설정 (활동 + 말풍선 합치기)
+    # CustomActivity에서 emoji 인자가 가끔 에러를 내니, 안전하게 name에 합쳤습니다.
     activity_list = [
         discord.Activity(type=discord.ActivityType.watching, name="서버 인원 전수 조사"),
         discord.CustomActivity(name="연님을 위해서 24시간 일하는 중 🥵")
     ]
-
-    # 2. 한 번의 명령으로 두 상태 모두 전송
-    await bot.change_presence(status=discord.Status.online, activities=activity_list)
+    
+    try:
+        await bot.change_presence(status=discord.Status.online, activities=activity_list)
+        print("상태 메시지 설정 완료!")
+    except Exception as e:
+        print(f"상태 설정 중 오류 발생: {e}")
 
     # ... 이후 전수 조사 로직은 그대로 유지 ...
     data = load_data()
