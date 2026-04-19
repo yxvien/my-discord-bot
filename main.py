@@ -97,6 +97,8 @@ async def management_task():
 @bot.event
 async def on_ready():
     print(f'{bot.user}가 가동되었습니다!')
+    activity = discord.Activity(type=discord.ActivityType.watching, name="서버 인원 전수 조사")
+    await bot.change_presence(status=discord.Status.online, activity=activity)
     
     # 전수 조사 로직
     data = load_data()
