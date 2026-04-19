@@ -97,9 +97,19 @@ async def management_task():
 @bot.event
 async def on_ready():
     print(f'{bot.user}가 가동되었습니다!')
-    activity = discord.Activity(type=discord.ActivityType.watching, name="서버 인원 전수 조사")
-    await bot.change_presence(status=discord.Status.online, activity=activity)
-    
+
+    # 1. 두 가지 상태를 리스트로 묶기
+    activity_list = [
+        discord.Activity(type=discord.ActivityType.watching, name="서버 인원 전수 조사"),
+        discord.CustomActivity(name="연님을 위해서 24시간 일하는 중 🥵")
+    ]
+
+    # 2. 한 번의 명령으로 두 상태 모두 전송
+    await bot.change_presence(status=discord.Status.online, activities=activity_list)
+
+    # ... 이후 전수 조사 로직은 그대로 유지 ...
+    data = load_data()
+    # (생략)
     # 전수 조사 로직
     data = load_data()
     now = datetime.now().isoformat()
