@@ -4,6 +4,7 @@ import json
 import os
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+import random
 
 # 1. 설정 및 환경 변수
 load_dotenv()
@@ -126,4 +127,32 @@ async def on_ready():
     if not management_task.is_running():
         management_task.start()
 
+@bot.command(name="오늘뭐먹지")
+async def recommend_menu(ctx):
+    menu_list = [
+    # 한식 (20가지)
+    "김치찌개", "된장찌개", "부대찌개", "순두부찌개", "제육볶음", 
+    "불고기", "비빔밥", "닭갈비", "삼겹살", "소갈비찜", 
+    "순대국밥", "뼈해장국", "설렁탕", "육개장", "닭볶음탕", 
+    "보쌈", "족발", "냉면", "칼국수", "수제비",
+
+    # 일식/중식 (20가지)
+    "마라탕", "꿔바로우", "짜장면", "짬뽕", "볶음밥", 
+    "탕수육", "양꼬치", "훠궈", "돈카츠", "가츠동", 
+    "사케동", "텐동", "초밥", "라멘", "우동", 
+    "소바", "규동", "야끼소바", "오코노미야끼", "샤브샤브",
+
+    # 양식/기타 (20가지)
+    "치즈피자", "페퍼로니피자", "포테이토피자", "알리오올리오", "까르보나라", 
+    "토마토파스타", "리조또", "치즈버거", "치킨버거", "스테이크", 
+    "후라이드치킨", "양념치킨", "간장치킨", "샌드위치", "샐러드", 
+    "타코", "브리또", "쌀국수", "팟타이", "나시고랭","분짜", "반미", "포케"
+]
+    selected = random.choice(menu_list)
+    
+    embed = discord.Embed(title="🍴 오늘의 메뉴 추천", color=0xffcc00)
+    embed.add_field(name="✨ 결정된 메뉴", value=f"**{selected}**")
+    await ctx.send(embed=embed)
+
+# 6. 대망의 마지막 줄!
 bot.run(TOKEN)
