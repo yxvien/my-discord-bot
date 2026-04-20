@@ -1,29 +1,29 @@
 import discord
 from discord.ext import commands, tasks
 import json
-import os  # 추가: 환경 변수 사용을 위함
-from dotenv import load_dotenv  # 추가: .env 파일 로드를 위함
+import os
+from dotenv import load_dotenv
 from datetime import datetime, timedelta
 
-# 1. 설정
-load_dotenv()  # .env 파일에 저장된 내용을 불러옵니다.
-TOKEN = os.getenv('DISCORD_TOKEN') # 이제 토큰을 직접 적지 않고 환경 변수에서 가져옵니다
-INACTIVE_ROLE_NAME = "D"
-ACTIVE_ROLE_NAME = "A"   # 활동 중인 사람 역할 이름 (따옴표 포함 문자열로 관리)
-CHECK_INTERVAL_DAYS = 14
+# 1. 설정 및 환경 변수
+load_dotenv()
+TOKEN = os.getenv('DISCORD_TOKEN') 
 
+INACTIVE_ROLE_NAME = "D"
+ACTIVE_ROLE_NAME = "A"
 ADMIN_CHANNEL_ID = 1437786580340441142 # 관리자 알림 채널 ID
 MY_GUILD_ID = 1437683163957559340      # 서버 ID
+
 RESET_DAY = 0  # 0: 월요일
-RESET_HOUR = 0 # 리셋할 시간
+RESET_HOUR = 0 # 리셋할 시간 (0시)
 
 intents = discord.Intents.default()
 intents.members = True
 intents.voice_states = True
-intents.message_content = True # 메세지 권한 추가
+intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# 활동 기록 로드/저장 함수
+# 데이터 로드/저장 함수
 def load_data():
     if os.path.exists("activity.json"):
         with open("activity.json", "r") as f:
@@ -37,95 +37,91 @@ def save_data(data):
     with open("activity.json", "w") as f:
         json.dump(data, f, indent=4)
 
-# 2. 음성 채널 입장 감지
+# 2. 음성 채널 입장 감지 (1번 요구사항: 입장 시 A 역할 부여)
 @bot.event
 async def on_voice_state_update(member, before, after):
-    if after.channel is not None: # 채널에 들어왔을 때
+    if after.channel is not None:
+        # 활동 기록 업데이트
         data = load_data()
         data[str(member.id)] = datetime.now().isoformat()
         save_data(data)
         
-        # 역할 부여 로직 (수정됨)
+        # A 역할 부여
         role = discord.utils.get(member.guild.roles, name=ACTIVE_ROLE_NAME)
-        if role:
-            await member.add_roles(role) # await 추가
+        if role and role not in member.roles:
+            await member.add_roles(role)
 
-# 3. 2주 주기 체크 스케줄러
+# 3. 2주 주기 관리 스케줄러
 @tasks.loop(hours=1)
 async def management_task():
     now = datetime.now()
+    
+    # [중요] 격주 리셋을 위한 주차 계산 (ISO 주차 % 2 == 0 일 때 리셋)
+    # 만약 이번 주가 아니라 다음 주부터 시작하고 싶다면 == 1로 변경하세요.
+    is_reset_week = (now.isocalendar()[1] % 2 == 0)
+    
+    if not is_reset_week:
+        return
+
     guild = bot.get_guild(MY_GUILD_ID)
     if not guild: return
 
-    # 리셋 1시간 전 예고 로직
+    # A. 리셋 1시간 전 (2번 요구사항: A 없는 사람에게 D 부여 + 알림)
     if now.weekday() == RESET_DAY and now.hour == (RESET_HOUR - 1) % 24:
         admin_channel = bot.get_channel(ADMIN_CHANNEL_ID)
         inactive_role = discord.utils.get(guild.roles, name=INACTIVE_ROLE_NAME)
         active_role = discord.utils.get(guild.roles, name=ACTIVE_ROLE_NAME)
         
-        data = load_data()
-        warning_list = []
-
+        warning_count = 0
         for member in guild.members:
             if member.bot: continue
-            last_active_str = data.get(str(member.id))
-            is_inactive = False
-            
-            if last_active_str:
-                last_active = datetime.fromisoformat(last_active_str)
-                if now - last_active > timedelta(days=CHECK_INTERVAL_DAYS):
-                    is_inactive = True
-            else:
-                is_inactive = True
+            # A 역할이 없는 사람에게 D 부여
+            if active_role not in member.roles:
+                if inactive_role:
+                    await member.add_roles(inactive_role)
+                    warning_count += 1
 
-            if is_inactive and inactive_role:
-                await member.add_roles(inactive_role)
-                if active_role:
-                    await member.remove_roles(active_role)
-                warning_list.append(member.display_name)
+        if admin_channel:
+            await admin_channel.send(f"⏰ **리셋 1시간 전 알림**\n미활동자 {warning_count}명에게 '{INACTIVE_ROLE_NAME}' 역할을 부여했습니다. 잠시 후 데이터가 리셋됩니다.")
 
-        if admin_channel and warning_list:
-            await admin_channel.send(f"⏰ **리셋 1시간 전 알림**\n2주 미활동자 {len(warning_list)}명에게 '{INACTIVE_ROLE_NAME}' 역할을 부여했습니다.")
-
-    # 실제 데이터 리셋 로직 (정각)
+    # B. 정각 리셋 (3번 요구사항: A 제거, 데이터 초기화, D는 유지)
     if now.weekday() == RESET_DAY and now.hour == RESET_HOUR:
-        save_data({})
+        active_role = discord.utils.get(guild.roles, name=ACTIVE_ROLE_NAME)
+        
+        # 서버의 모든 멤버를 순회하며 A 역할만 제거
+        if active_role:
+            for member in guild.members:
+                if active_role in member.roles:
+                    await member.remove_roles(active_role)
+        
+        save_data({}) # 활동 데이터 초기화 (다시 1번부터 시작)
+        
         admin_channel = bot.get_channel(ADMIN_CHANNEL_ID)
         if admin_channel:
-            await admin_channel.send("🧹 **2주 주기 리셋 완료**\n활동 데이터가 초기화되었습니다.")
+            await admin_channel.send("🧹 **2주 주기 리셋 완료**\n모든 'A' 역할을 회수했습니다. 새로운 2주 측정을 시작합니다!")
 
 @bot.event
 async def on_ready():
-    print(f'{bot.user}가 가동되었습니다!')
-
-    # 라이브러리 버전에 맞춰 단수형 'activity'로 수정합니다.
-    # 두 개를 동시에 띄우는 게 안 되는 버전이므로, 연우님이 가장 원하셨던 '말풍선'을 우선으로 설정할게요!
+    print(f'{bot.user} 가동 시작!')
+    
+    # 상태 메시지 설정
     try:
-        # 말풍선(CustomActivity) 설정
         status_msg = discord.CustomActivity(name="연님을 위해서 24시간 일하는 중 🥵")
         await bot.change_presence(status=discord.Status.online, activity=status_msg)
-        print("상태 메시지 설정 완료!")
-    except Exception as e:
-        print(f"상태 설정 중 오류 발생: {e}")
+    except:
+        pass
 
-    # ... 이후 전수 조사 로직은 그대로 유지 ...
-    data = load_data()
-    # (생략)
-    # 전수 조사 로직
-    data = load_data()
-    now = datetime.now().isoformat()
+    # 봇 켜질 때 음성 채널에 이미 들어와 있는 사람들 체크
     guild = bot.get_guild(MY_GUILD_ID)
-    
     if guild:
-        for voice_channel in guild.voice_channels:
-            for member in voice_channel.members:
+        data = load_data()
+        active_role = discord.utils.get(guild.roles, name=ACTIVE_ROLE_NAME)
+        for vc in guild.voice_channels:
+            for member in vc.members:
                 if not member.bot:
-                    data[str(member.id)] = now
-                    role = discord.utils.get(guild.roles, name=ACTIVE_ROLE_NAME)
-                    if role:
-                        await member.add_roles(role)
+                    data[str(member.id)] = datetime.now().isoformat()
+                    if active_role: await member.add_roles(active_role)
         save_data(data)
-        print("현재 접속자 전수 조사 완료!")
 
     if not management_task.is_running():
         management_task.start()
